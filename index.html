@@ -53,12 +53,11 @@
     <div id="downloadContainer"></div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/streamsaver@2.0.6/StreamSaver.min.js"></script>
 <script>
 const uploadBtn = document.getElementById("uploadBtn");
 const excelInput = document.getElementById("excelFile");
 const status = document.getElementById("status");
-const downloadContainer = document.getElementById("downloadContainer");
-let objectURL = null;
 
 uploadBtn.addEventListener("click", async () => {
     if (!excelInput.files.length) {
@@ -86,35 +85,31 @@ uploadBtn.addEventListener("click", async () => {
             return;
         }
 
-        // Revoke any existing object URL to avoid memory leaks
-        if (objectURL) {
-            window.URL.revokeObjectURL(objectURL);
+        // For large files from a StreamingResponse, we should pipe the stream
+        // directly to the file system to avoid high memory usage.
+        const fileStream = streamSaver.createWriteStream('formatted_videos.zip');
+        const readableStream = response.body;
+
+        // Pipe the response stream to the file stream
+        if (readableStream.pipeTo) {
+            status.textContent = "Download starting...";
+            await readableStream.pipeTo(fileStream);
+            status.textContent = "Download complete!";
+        } else {
+            // Fallback for browsers that don't support pipeTo
+            const writer = fileStream.getWriter();
+            const reader = readableStream.getReader();
+            const pump = () => reader.read()
+                .then(res => res.done
+                    ? writer.close()
+                    : writer.write(res.value).then(pump));
+            await pump();
+            status.textContent = "Download complete!";
         }
 
-        // Get blob of ZIP file
-        const blob = await response.blob();
-        objectURL = window.URL.createObjectURL(blob);
-
-        // Clear previous download button and create a new one
-        downloadContainer.innerHTML = '';
-        const downloadLink = document.createElement("a");
-        downloadLink.href = objectURL;
-        downloadLink.download = "formatted_videos.zip";
-        downloadLink.textContent = "Download Formatted Videos";
-        downloadLink.style.display = 'inline-block';
-        downloadLink.style.marginTop = '10px';
-        downloadLink.style.padding = '10px 20px';
-        downloadLink.style.background = '#28a745';
-        downloadLink.style.color = 'white';
-        downloadLink.style.textDecoration = 'none';
-        downloadLink.style.borderRadius = '5px';
-
-        downloadContainer.appendChild(downloadLink);
-
-        status.textContent = "Download ready!";
     } catch (err) {
         console.error(err);
-        status.textContent = "An error occurred.";
+        status.textContent = "An error occurred during download.";
     } finally {
         uploadBtn.disabled = false;
     }
