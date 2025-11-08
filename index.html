@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Processor</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f5f5f5;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+    .container {
+        background: #fff;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        text-align: center;
+        width: 400px;
+    }
+    input[type="file"] {
+        margin: 20px 0;
+    }
+    button {
+        background: #007bff;
+        color: #fff;
+        border: none;
+        padding: 10px 20px;
+        font-size: 16px;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    button:disabled {
+        background: #aaa;
+    }
+    #status {
+        margin-top: 15px;
+        font-size: 14px;
+        color: green;
+    }
+</style>
+</head>
+<body>
+<div class="container">
+    <h2>Upload Excel File</h2>
+    <input type="file" id="excelFile" accept=".xlsx" />
+    <br>
+    <button id="uploadBtn">Process</button>
+    <p id="status"></p>
+    <div id="downloadContainer"></div>
+</div>
+
+<script>
+const uploadBtn = document.getElementById("uploadBtn");
+const excelInput = document.getElementById("excelFile");
+const status = document.getElementById("status");
+const downloadContainer = document.getElementById("downloadContainer");
+let objectURL = null;
+
+uploadBtn.addEventListener("click", async () => {
+    if (!excelInput.files.length) {
+        alert("Please select an Excel file!");
+        return;
+    }
+
+    const file = excelInput.files[0];
+    const formData = new FormData();
+    formData.append("file", file);
+
+    uploadBtn.disabled = true;
+    status.textContent = "Processing... This may take a while.";
+
+    try {
+        const response = await fetch("http://localhost:8000/process_excel/", {
+            method: "POST",
+            body: formData
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            status.textContent = "Error: " + error.error;
+            uploadBtn.disabled = false;
+            return;
+        }
+
+        // Revoke any existing object URL to avoid memory leaks
+        if (objectURL) {
+            window.URL.revokeObjectURL(objectURL);
+        }
+
+        // Get blob of ZIP file
+        const blob = await response.blob();
+        objectURL = window.URL.createObjectURL(blob);
+
+        // Clear previous download button and create a new one
+        downloadContainer.innerHTML = '';
+        const downloadLink = document.createElement("a");
+        downloadLink.href = objectURL;
+        downloadLink.download = "formatted_videos.zip";
+        downloadLink.textContent = "Download Formatted Videos";
+        downloadLink.style.display = 'inline-block';
+        downloadLink.style.marginTop = '10px';
+        downloadLink.style.padding = '10px 20px';
+        downloadLink.style.background = '#28a745';
+        downloadLink.style.color = 'white';
+        downloadLink.style.textDecoration = 'none';
+        downloadLink.style.borderRadius = '5px';
+
+        downloadContainer.appendChild(downloadLink);
+
+        status.textContent = "Download ready!";
+    } catch (err) {
+        console.error(err);
+        status.textContent = "An error occurred.";
+    } finally {
+        uploadBtn.disabled = false;
+    }
+});
+</script>
+</body>
+</html>
